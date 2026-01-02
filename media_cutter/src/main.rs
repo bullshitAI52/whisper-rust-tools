@@ -53,6 +53,12 @@ struct MediaCutterApp {
     // Speed
     speed_factor: String,
     
+    // Volume
+    volume_factor: String,
+    
+    // Rotate
+    rotate_mode: String,
+    
     // Runtime
     rt: Runtime,
 }
@@ -80,6 +86,8 @@ impl Default for MediaCutterApp {
             compress_crf: "28".to_owned(),
             convert_target_format: "mp4".to_owned(),
             speed_factor: "1.0".to_owned(),
+            volume_factor: "1.0".to_owned(),
+            rotate_mode: "90_cw".to_owned(),
             rt: Runtime::new().unwrap(),
         }
     }
@@ -595,6 +603,74 @@ impl eframe::App for MediaCutterApp {
                          match VideoCutter::generate_gif(&input, &output_path) {
                              Ok(_) => self.log(&format!("✅ GIF 生成成功: {}", output_path)),
                              Err(e) => self.log(&format!("❌ GIF 失败: {}", e)),
+                         }
+                     }
+                }
+            });
+
+            ui.separator();
+            
+            ui.add_space(5.0);
+            ui.label("7. 音量调节 (Volume Boost)");
+            ui.horizontal(|ui| {
+                ui.label("音量倍率 (0.0-5.0):");
+                ui.add(egui::TextEdit::singleline(&mut self.volume_factor).desired_width(40.0))
+                  .on_hover_text("1.0=原始, 2.0=双倍音量, 0.0=静音");
+                
+                if ui.button("🔊 调整音量").clicked() {
+                     let input = self.input_path.clone();
+                     let output_dir = self.output_dir.clone();
+                     let factor_res = self.volume_factor.parse::<f32>();
+                     
+                     if input.is_empty() {
+                         self.log("请先选择输入文件。");
+                     } else if let Ok(factor) = factor_res {
+                         self.log("正在调整音量...");
+                         let file_stem = Path::new(&input).file_stem().unwrap().to_string_lossy();
+                         let output_path = format!("{}/{}_vol_{}.mp4", output_dir, file_stem, factor);
+                         
+                         match VideoCutter::modify_volume(&input, &output_path, factor) {
+                             Ok(_) => self.log(&format!("✅ 音量调整成功: {}", output_path)),
+                             Err(e) => self.log(&format!("❌ 音量调整失败: {}", e)),
+                         }
+                     } else {
+                         self.log("请输入有效的音量倍率 (例如 1.5, 0.8)");
+                     }
+                }
+            });
+
+            ui.add_space(5.0);
+            ui.label("8. 视频旋转 (Rotate)");
+            ui.horizontal(|ui| {
+                ui.label("旋转模式:");
+                egui::ComboBox::from_id_salt("rot_combo")
+                    .selected_text(match self.rotate_mode.as_str() {
+                        "90_cw" => "顺时针 90°",
+                        "90_ccw" => "逆时针 90°",
+                        "180" => "旋转 180°",
+                        _ => "顺时针 90°"
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.rotate_mode, "90_cw".to_string(), "顺时针 90°");
+                        ui.selectable_value(&mut self.rotate_mode, "90_ccw".to_string(), "逆时针 90°");
+                        ui.selectable_value(&mut self.rotate_mode, "180".to_string(), "旋转 180°");
+                    });
+
+                if ui.button("↻ 执行旋转").clicked() {
+                     let input = self.input_path.clone();
+                     let output_dir = self.output_dir.clone();
+                     let mode = self.rotate_mode.clone();
+                     
+                     if input.is_empty() {
+                         self.log("请先选择输入文件。");
+                     } else {
+                         self.log("正在旋转视频...");
+                         let file_stem = Path::new(&input).file_stem().unwrap().to_string_lossy();
+                         let output_path = format!("{}/{}_rot.mp4", output_dir, file_stem);
+                         
+                         match VideoCutter::rotate_video(&input, &output_path, &mode) {
+                             Ok(_) => self.log(&format!("✅ 旋转成功: {}", output_path)),
+                             Err(e) => self.log(&format!("❌ 旋转失败: {}", e)),
                          }
                      }
                 }

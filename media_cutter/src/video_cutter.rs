@@ -236,4 +236,50 @@ impl VideoCutter {
             Err(anyhow::anyhow!("FFmpeg GIF generation failed"))
         }
     }
+
+    /// Modify audio volume
+    /// volume = 1.0 (original), 0.5 (half), 2.0 (double)
+    pub fn modify_volume(input: &str, output: &str, factor: f32) -> Result<()> {
+        let filter = format!("volume={}", factor);
+        let status = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-i").arg(input)
+            .arg("-filter:a").arg(&filter)
+            .arg("-c:v").arg("copy") // Copy video, only re-encode audio
+            .arg(output)
+            .status()?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("FFmpeg volume adjustment failed"))
+        }
+    }
+
+    /// Rotate video
+    /// mode: "1" = 90Clockwise, "2" = 90CounterClockwise, "180" = 180 (transpose=1 vs 2 vs hflip,vflip)
+    /// Simple map: 90CW=1, 90CCW=2, 180=1,transpose=1 (no, that's complex, let's stick to 90CW first)
+    /// Actually: transpose=1 (90CW), transpose=2 (90CCW).
+    pub fn rotate_video(input: &str, output: &str, mode: &str) -> Result<()> {
+        let filter = match mode {
+            "90_cw" => "transpose=1",
+            "90_ccw" => "transpose=2",
+            "180" => "transpose=2,transpose=2",
+            _ => return Err(anyhow::anyhow!("Invalid rotation mode")),
+        };
+
+        let status = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-i").arg(input)
+            .arg("-vf").arg(filter)
+            .arg("-c:a").arg("copy") // Copy audio
+            .arg(output)
+            .status()?;
+            
+        if status.success() {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("FFmpeg rotation failed"))
+        }
+    }
 }
