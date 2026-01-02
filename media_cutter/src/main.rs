@@ -38,6 +38,18 @@ struct MediaCutterApp {
     // Naming
     output_template: String,
     
+    // Burn Subs
+    burn_srt_path: String,
+    
+    // Merge
+    merge_inputs: Vec<String>,
+    
+    // Compression
+    compress_crf: String,
+    
+    // Converter
+    convert_target_format: String,
+    
     // Runtime
     rt: Runtime,
 }
@@ -60,6 +72,10 @@ impl Default for MediaCutterApp {
             split_count: "3".to_owned(),
             split_duration: "10".to_owned(),
             output_template: "segment_{}".to_owned(),
+            burn_srt_path: String::new(),
+            merge_inputs: vec![],
+            compress_crf: "28".to_owned(),
+            convert_target_format: "mp4".to_owned(),
             rt: Runtime::new().unwrap(),
         }
     }
@@ -355,6 +371,174 @@ impl eframe::App for MediaCutterApp {
                          }
                     } else {
                          self.log("请输入有效的时长 (分钟)。");
+                    }
+                }
+            });
+
+            ui.separator();
+
+            ui.separator();
+
+            ui.separator();
+
+            // Subtitle Burn-in & Audio Extract
+            ui.heading("🛠️ 实用工具箱 / Toolkit");
+            ui.label("1. 字幕压制 (Burn-in Subtitles)");
+            ui.horizontal(|ui| {
+                ui.label("字幕文件:");
+                ui.text_edit_singleline(&mut self.burn_srt_path);
+                if ui.button("浏览...").clicked() {
+                    if let Some(path) = FileDialog::new().add_filter("Subtitle", &["srt"]).pick_file() {
+                        self.burn_srt_path = path.display().to_string();
+                    }
+                }
+                if ui.button("🔥 开始压制").clicked() {
+                     let input = self.input_path.clone();
+                     let srt = self.burn_srt_path.clone();
+                     let output_dir = self.output_dir.clone();
+                     let crf = self.enc_crf.clone();
+                     let preset = self.enc_preset.clone();
+                     
+                     if input.is_empty() || srt.is_empty() {
+                         self.log("请选择视频和字幕文件。");
+                     } else {
+                         self.log("正在压制 (请耐心等待)...");
+                         let file_stem = Path::new(&input).file_stem().unwrap().to_string_lossy();
+                         let output_path = format!("{}/{}_hardsub.mp4", output_dir, file_stem);
+                         
+                         match VideoCutter::burn_subtitles(&input, &srt, &output_path, &crf, &preset) {
+                             Ok(_) => self.log(&format!("✅ 成功: {}", output_path)),
+                             Err(e) => self.log(&format!("❌ 失败: {}", e)),
+                         }
+                     }
+                }
+            });
+            
+            ui.add_space(5.0);
+            ui.label("2. 提取音频 (Extract Audio)");
+            ui.horizontal(|ui| {
+                if ui.button("🎵 提取 MP3").clicked() {
+                    let input = self.input_path.clone();
+                    let output_dir = self.output_dir.clone();
+                    
+                    if input.is_empty() {
+                        self.log("请先选择输入视频文件。");
+                    } else {
+                        self.log("正在提取音频...");
+                        let file_stem = Path::new(&input).file_stem().unwrap().to_string_lossy();
+                        let output_path = format!("{}/{}.mp3", output_dir, file_stem);
+                        
+                        match VideoCutter::extract_audio(&input, &output_path) {
+                            Ok(_) => self.log(&format!("✅ 提取成功: {}", output_path)),
+                            Err(e) => self.log(&format!("❌ 提取失败: {}", e)),
+                        }
+                    }
+                }
+            });
+
+            ui.separator();
+            
+            // Merge Videos
+            ui.heading("🔗 视频合并 / Merge Videos");
+            ui.horizontal(|ui| {
+                if ui.button("➕ 添加视频").clicked() {
+                    if let Some(paths) = FileDialog::new()
+                        .add_filter("Video", &["mp4", "mov", "mkv"])
+                        .pick_files() 
+                    {
+                        for p in paths {
+                            self.merge_inputs.push(p.display().to_string());
+                        }
+                    }
+                }
+                if ui.button("🗑 清空列表").clicked() {
+                    self.merge_inputs.clear();
+                }
+            });
+            
+            egui::ScrollArea::vertical().id_source("merge_list").max_height(100.0).show(ui, |ui| {
+                for (i, path) in self.merge_inputs.iter().enumerate() {
+                    ui.label(format!("{}. {}", i + 1, Path::new(path).file_name().unwrap_or_default().to_string_lossy()));
+                }
+            });
+            
+            if !self.merge_inputs.is_empty() {
+                if ui.button("🔗 开始合并 (Merge)").clicked() {
+                    let inputs = self.merge_inputs.clone();
+                    let output_dir = self.output_dir.clone();
+                    self.log(&format!("正在合并 {} 个视频...", inputs.len()));
+                    
+                    let output_path = format!("{}/merged_output_{}.mp4", output_dir, uuid::Uuid::new_v4());
+                    
+                    match VideoCutter::merge_videos(&inputs, &output_path) {
+                         Ok(_) => self.log(&format!("✅ 合并成功: {}", output_path)),
+                         Err(e) => self.log(&format!("❌ 合并失败: {}", e)),
+                    }
+                }
+            }
+            
+            ui.add_space(5.0);
+            ui.label("3. 视频压缩 (Compress/Shrink)");
+            ui.horizontal(|ui| {
+                ui.label("压缩强度 (CRF, 越大越小):");
+                ui.add(egui::TextEdit::singleline(&mut self.compress_crf).desired_width(30.0))
+                  .on_hover_text("23=标准, 28=较高压缩, 32=强力压缩");
+                  
+                if ui.button("📉 开始瘦身").clicked() {
+                    let input = self.input_path.clone();
+                    let output_dir = self.output_dir.clone();
+                    let crf = self.compress_crf.clone();
+                    
+                    if input.is_empty() {
+                        self.log("请先选择输入视频文件。");
+                    } else {
+                        self.log("正在压缩 (文件较大时请耐心等待)...");
+                        let file_stem = Path::new(&input).file_stem().unwrap().to_string_lossy();
+                        let output_path = format!("{}/{}_small.mp4", output_dir, file_stem);
+                        
+                        // use std::thread for simplicity or logic here
+                        // In real app, spawn
+                        match VideoCutter::compress_video(&input, &output_path, &crf) {
+                            Ok(_) => self.log(&format!("✅ 压缩与瘦身成功: {}", output_path)),
+                            Err(e) => self.log(&format!("❌ 压缩失败: {}", e)),
+                        }
+                    }
+                }
+            });
+            
+            ui.separator();
+            
+            ui.add_space(5.0);
+            ui.label("4. 格式转换工厂 (Format Converter)");
+            ui.horizontal(|ui| {
+                ui.label("目标格式:");
+                egui::ComboBox::from_id_salt("fmt_combo")
+                    .selected_text(&self.convert_target_format)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.convert_target_format, "mp4".to_string(), "MP4 (Video)");
+                        ui.selectable_value(&mut self.convert_target_format, "mov".to_string(), "MOV (Video)");
+                        ui.selectable_value(&mut self.convert_target_format, "mkv".to_string(), "MKV (Video)");
+                        ui.selectable_value(&mut self.convert_target_format, "mp3".to_string(), "MP3 (Audio)");
+                        ui.selectable_value(&mut self.convert_target_format, "wav".to_string(), "WAV (Audio)");
+                        ui.selectable_value(&mut self.convert_target_format, "m4a".to_string(), "M4A (Audio)");
+                    });
+
+                if ui.button("🔄 开始转换").clicked() {
+                    let input = self.input_path.clone();
+                    let output_dir = self.output_dir.clone();
+                    let ext = self.convert_target_format.clone();
+                    
+                    if input.is_empty() {
+                        self.log("请先选择输入文件。");
+                    } else {
+                        self.log("正在转换格式...");
+                        let file_stem = Path::new(&input).file_stem().unwrap().to_string_lossy();
+                        let output_path = format!("{}/{}.{}", output_dir, file_stem, ext);
+                        
+                        match VideoCutter::convert_format(&input, &output_path) {
+                            Ok(_) => self.log(&format!("✅ 转换成功: {}", output_path)),
+                            Err(e) => self.log(&format!("❌ 转换失败: {}", e)),
+                        }
                     }
                 }
             });
