@@ -1,0 +1,16 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.12", features = ["json", "blocking"] } 
+anyhow = "1.0"
+thiserror = "2.0"
+regex = "1.11"
+# chowdhury = "0.4" # Removed invalid dep
+log = "0.4"
+ffmpeg-sidecar = "2.0" # Wrapper for FFmpeg if useful, or just std::process
+uuid = { version = "1.11", features = ["v4"] }

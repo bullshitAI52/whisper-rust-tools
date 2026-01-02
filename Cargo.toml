@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "common",
+    "media_cutter",
+    "whisper_app",
+]
+resolver = "2"
