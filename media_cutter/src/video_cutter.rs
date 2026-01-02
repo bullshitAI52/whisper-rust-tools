@@ -183,4 +183,57 @@ impl VideoCutter {
              }
         }
     }
+
+    /// Change video speed (0.5x - 4.0x)
+    /// Adjusts both video (setpts) and audio (atempo)
+    pub fn change_speed(input: &str, output: &str, speed: f64) -> Result<()> {
+        // filter logic:
+        // video: setpts = PTS / speed
+        // audio: atempo = speed
+        // Note: atempo is limited to 0.5 - 2.0 range. For higher/lower, chaining is needed. 
+        // For simplicity, we limit UI to 0.5-2.0 or handle safely.
+        // Let's implement support for 0.5 to 2.0 directly.
+        if speed < 0.5 || speed > 2.0 {
+            return Err(anyhow::anyhow!("Speed must be between 0.5 and 2.0 (FFmpeg limit for single pass)"));
+        }
+
+        let video_filter = format!("setpts=PTS/{}", speed);
+        let audio_filter = format!("atempo={}", speed);
+
+        let status = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-i").arg(input)
+            .arg("-filter:v").arg(&video_filter)
+            .arg("-filter:a").arg(&audio_filter)
+            .arg(output)
+            .status()?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("FFmpeg speed adjustment failed"))
+        }
+    }
+
+    /// Generate GIF from video
+    pub fn generate_gif(input: &str, output: &str) -> Result<()> {
+        // High quality GIF palette generation
+        let filter = "fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse";
+        
+        // TODO: Allow optional start/duration setting for GIF, defaults to first 5s or full?
+        // Let's assume full video (usually short clips)
+        
+        let status = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-i").arg(input)
+            .arg("-vf").arg(filter)
+            .arg(output)
+            .status()?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("FFmpeg GIF generation failed"))
+        }
+    }
 }

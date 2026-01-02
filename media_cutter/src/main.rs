@@ -50,6 +50,9 @@ struct MediaCutterApp {
     // Converter
     convert_target_format: String,
     
+    // Speed
+    speed_factor: String,
+    
     // Runtime
     rt: Runtime,
 }
@@ -76,6 +79,7 @@ impl Default for MediaCutterApp {
             merge_inputs: vec![],
             compress_crf: "28".to_owned(),
             convert_target_format: "mp4".to_owned(),
+            speed_factor: "1.0".to_owned(),
             rt: Runtime::new().unwrap(),
         }
     }
@@ -540,6 +544,59 @@ impl eframe::App for MediaCutterApp {
                             Err(e) => self.log(&format!("❌ 转换失败: {}", e)),
                         }
                     }
+                }
+            });
+
+            ui.separator();
+
+            ui.add_space(5.0);
+            ui.label("5. 倍速处理 (Playback Speed)");
+            ui.horizontal(|ui| {
+                ui.label("速度倍率 (0.5 - 2.0):");
+                ui.add(egui::TextEdit::singleline(&mut self.speed_factor).desired_width(40.0));
+                
+                if ui.button("⏩ 执行变速").clicked() {
+                    let input = self.input_path.clone();
+                    let output_dir = self.output_dir.clone();
+                    let factor_res = self.speed_factor.parse::<f64>();
+                    
+                    if input.is_empty() {
+                         self.log("请先选择输入文件。");
+                    } else if let Ok(factor) = factor_res {
+                         self.log("正在变更速度...");
+                         let file_stem = Path::new(&input).file_stem().unwrap().to_string_lossy();
+                         let output_path = format!("{}/{}_speed_{}.mp4", output_dir, file_stem, factor);
+                         
+                         match VideoCutter::change_speed(&input, &output_path, factor) {
+                             Ok(_) => self.log(&format!("✅ 变速成功: {}", output_path)),
+                             Err(e) => self.log(&format!("❌ 变速失败: {}", e)),
+                         }
+                    } else {
+                        self.log("请输入有效的倍率 (0.5-2.0)。");
+                    }
+                }
+            });
+
+            ui.add_space(5.0);
+            ui.label("6. GIF 动图制作 (GIF Maker)");
+            ui.horizontal(|ui| {
+                ui.label("将当前视频转为动图 (自动缩放宽度 320px)");
+                if ui.button("🖼 生成 GIF").clicked() {
+                     let input = self.input_path.clone();
+                     let output_dir = self.output_dir.clone();
+                     
+                     if input.is_empty() {
+                         self.log("请先选择输入文件。");
+                     } else {
+                         self.log("正在生成 GIF...");
+                         let file_stem = Path::new(&input).file_stem().unwrap().to_string_lossy();
+                         let output_path = format!("{}/{}.gif", output_dir, file_stem);
+                         
+                         match VideoCutter::generate_gif(&input, &output_path) {
+                             Ok(_) => self.log(&format!("✅ GIF 生成成功: {}", output_path)),
+                             Err(e) => self.log(&format!("❌ GIF 失败: {}", e)),
+                         }
+                     }
                 }
             });
 
