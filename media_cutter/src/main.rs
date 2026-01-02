@@ -34,6 +34,9 @@ struct MediaCutterApp {
     split_count: String,
     split_duration: String,
     
+    // Naming
+    output_template: String,
+    
     // Runtime
     rt: Runtime,
 }
@@ -54,6 +57,7 @@ impl Default for MediaCutterApp {
             trim_tail: "0".to_owned(),
             split_count: "3".to_owned(),
             split_duration: "10".to_owned(),
+            output_template: "segment_{}".to_owned(),
             rt: Runtime::new().unwrap(),
         }
     }
@@ -72,6 +76,17 @@ impl MediaCutterApp {
 
 impl eframe::App for MediaCutterApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Drag & Drop
+        if !ctx.input(|i| i.raw.dropped_files.is_empty()) {
+            let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+            if let Some(file) = dropped.first() {
+                if let Some(path) = &file.path {
+                     self.input_path = path.display().to_string();
+                     self.log(&format!("已为您加载文件: {}", self.input_path));
+                }
+            }
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("媒体剪辑工具 (Rust 版)");
             ui.separator();
@@ -364,14 +379,26 @@ impl eframe::App for MediaCutterApp {
                         });
                 }
                 
+                ui.separator();
+                ui.label("命名模板:");
+                ui.add(egui::TextEdit::singleline(&mut self.output_template).desired_width(120.0))
+                    .on_hover_text("使用 {} 代表序号。例如: my_video_{}");
+
                 if ui.button("🚀 开始剪辑").clicked() {
                      self.log("开始剪辑...");
                      let mut logs = Vec::new();
                      let crf = self.enc_crf.clone();
                      let preset = self.enc_preset.clone();
+                     let template = self.output_template.clone();
                      
                      for (i, seg) in self.segments.iter().enumerate() {
-                         let out_name = format!("{}/segment_{}.mp4", self.output_dir, i);
+                         let filename = if template.contains("{}") {
+                             template.replace("{}", &(i + 1).to_string())
+                         } else {
+                             format!("{}_{}", template, i + 1)
+                         };
+                         let out_name = format!("{}/{}.mp4", self.output_dir, filename);
+                         
                          match VideoCutter::cut_segment(
                              &self.input_path, 
                              &seg.start, 

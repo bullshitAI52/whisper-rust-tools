@@ -110,6 +110,47 @@ impl WhisperApp {
 impl eframe::App for WhisperApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.handle_messages();
+
+        // Drag & Drop Logic
+        if !ctx.input(|i| i.raw.dropped_files.is_empty()) {
+            let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+            let mut new_files = vec![];
+            
+            for file in dropped {
+                if let Some(path) = file.path {
+                    let path_str = path.display().to_string();
+                    let ext = path.extension().unwrap_or_default().to_string_lossy().to_lowercase();
+                    
+                    // Logic: If SRT/TXT -> Set to Translation/Storyboard input
+                    // If Video/Audio -> Add to Transcription list
+                    if ext == "srt" || ext == "txt" {
+                        if self.selected_tab == Tab::Translation {
+                            self.trans_input_file = path_str;
+                            self.log("已加载翻译文件 (SRT/TXT)");
+                        } else if self.selected_tab == Tab::Storyboard {
+                            self.story_input_file = path_str;
+                            self.log("已加载分镜文件 (SRT/TXT)");
+                        } else {
+                            // Default to Translation if not on a specific tab
+                            self.selected_tab = Tab::Translation;
+                            self.trans_input_file = path_str;
+                            self.log("已切换至翻译标签并加载文件");
+                        }
+                    } else {
+                        // Assume media file
+                        if self.selected_tab != Tab::Transcription {
+                            self.selected_tab = Tab::Transcription;
+                        }
+                        new_files.push(path_str);
+                    }
+                }
+            }
+            
+            if !new_files.is_empty() {
+                self.tx_files.extend(new_files);
+                self.log("已添加媒体文件到转写列表");
+            }
+        }
         
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
