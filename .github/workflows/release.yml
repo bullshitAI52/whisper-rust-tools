@@ -55,3 +55,27 @@ jobs:
       with:
         name: windows-binaries
         path: dist/
+  release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download MacOS Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: macos-binaries
+        
+    - name: Download Windows Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-binaries
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          whisper_app_mac
+          media_cutter_mac
+          whisper_app.exe
+          media_cutter.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
